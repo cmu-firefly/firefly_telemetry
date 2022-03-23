@@ -18,7 +18,7 @@ class PayloadTunnelType(Enum):
 
 class OnboardTelemetry:
     def __init__(self):
-        self.connection = mavutil.mavlink_connection('/dev/ttyUSB1', baud=57600 ,dialect='common')
+        self.connection = mavutil.mavlink_connection('/dev/ttyUSB0', baud=57600 ,dialect='common')
 
         self.new_fire_bins = []
         self.new_no_fire_bins = []
