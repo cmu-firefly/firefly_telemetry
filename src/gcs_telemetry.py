@@ -4,8 +4,7 @@ import rospy
 from std_msgs.msg import Int32MultiArray
 from pymavlink import mavutil
 import os
-from threading import Lock
-from enum import Enum
+import tf
 
 
 os.environ['MAVLINK20'] = '1'
@@ -13,9 +12,11 @@ os.environ['MAVLINK20'] = '1'
 
 class OnboardTelemetry:
     def __init__(self):
-        self.connection = mavutil.mavlink_connection('/dev/ttyUSB0', baud=57600, dialect='common')
+        self.connection = mavutil.mavlink_connection('/dev/ttyUSB0', baud=57600, dialect='firefly')
         self.new_fire_pub = rospy.Publisher("new_fire_bins", Int32MultiArray, queue_size=100)
         self.new_no_fire_pub = rospy.Publisher("new_no_fire_bins", Int32MultiArray, queue_size=100)
+
+        self.br = tf.TransformBroadcaster()
 
     def run(self):
         msg = self.connection.recv_match()
@@ -36,6 +37,13 @@ class OnboardTelemetry:
                 self.new_fire_pub.publish(updated_bins_msg)
             elif msg['payload_type'] == 32769:
                 self.new_no_fire_pub.publish(updated_bins_msg)
+        elif msg['mavpackettype'] == 'FIREFLY_POSE':
+            self.br.sendTransform((msg['x'], msg['y'], msg['z']),
+                                  msg['q'],
+                                  rospy.Time.now(),
+                                  "base_link1",
+                                  "world")
+
 
 
 if __name__ == "__main__":

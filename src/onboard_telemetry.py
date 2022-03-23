@@ -6,7 +6,7 @@ from pymavlink import mavutil
 import os
 from threading import Lock
 from enum import Enum
-
+import tf2_ros
 
 os.environ['MAVLINK20'] = '1'
 
@@ -18,14 +18,28 @@ class PayloadTunnelType(Enum):
 
 class OnboardTelemetry:
     def __init__(self):
-        self.connection = mavutil.mavlink_connection('/dev/mavlink', baud=57600 ,dialect='common')
+        self.connection = mavutil.mavlink_connection('/dev/mavlink', baud=57600, dialect='firefly')
+
+        self.tfBuffer = tf2_ros.Buffer()
+        self.listener = tf2_ros.TransformListener(self.tfBuffer)
 
         self.new_fire_bins = []
         self.new_no_fire_bins = []
         self.new_bins_mutex = Lock()
 
+        self.pose_mutex = Lock()
+        self.x = None
+        self.y = None
+        self.z = None
+        self.q = None
+        self.send_pose_flag = False
+
         rospy.Subscriber("new_fire_bins", Int32MultiArray, self.new_fire_bins_callback)
         rospy.Subscriber("new_no_fire_bins", Int32MultiArray, self.new_no_fire_bins_callback)
+        rospy.Timer(rospy.Duration(1), self.one_sec_timer_callback)
+
+        self.bytes_per_sec_send_rate = 1152.0
+        self.mavlink_packet_overhead_bytes = 12
 
     def new_fire_bins_callback(self, data: Int32MultiArray):
         with self.new_bins_mutex:
@@ -34,6 +48,27 @@ class OnboardTelemetry:
     def new_no_fire_bins_callback(self, data: Int32MultiArray):
         with self.new_bins_mutex:
             self.new_no_fire_bins.extend(data.data)
+
+    def one_sec_timer_callback(self, event):
+        try:
+            transform = self.tfBuffer.lookup_transform('world', 'base_link', rospy.Time(0))
+            with self.pose_mutex:
+                self.x = transform.transform.translation.x
+                self.y = transform.transform.translation.y
+                self.z = transform.transform.translation.z
+                self.q = [transform.transform.rotation.x,
+                          transform.transform.rotation.y,
+                          transform.transform.rotation.z,
+                          transform.transform.rotation.w]
+                self.send_pose_flag = True
+
+        except Exception as e:
+            print(e)
+            with self.pose_mutex:
+                self.x = None
+                self.y = None
+                self.z = None
+                self.q = None
 
     def send_map_update(self):
         updates_to_send = None
@@ -65,10 +100,25 @@ class OnboardTelemetry:
             self.connection.mav.tunnel_send(0, 0, PayloadTunnelType.NonFireBins.value, payload_length, payload)
 
         # Tunnel message is 145 bytes. Sleep by this much to not overwhelm the serial baud rate
-        rospy.sleep(145.0/1152.0)
+        rospy.sleep((self.mavlink_packet_overhead_bytes + 128 + 5)/self.bytes_per_sec_send_rate)
+
+    def send_pose_update(self):
+        with self.pose_mutex:
+            if self.send_pose_flag:
+                self.send_pose_flag = False
+                local_x = self.x
+                local_y = self.y
+                local_z = self.z
+                local_q = self.q
+            else:
+                return
+        self.connection.mav.firefly_pose_send(local_x, local_y, local_z, local_q)
+        # Tunnel message is 145 bytes. Sleep by this much to not overwhelm the serial baud rate
+        rospy.sleep((self.mavlink_packet_overhead_bytes + 28) / self.bytes_per_sec_send_rate)
 
     def run(self):
         self.send_map_update()
+        self.send_pose_update()
 
 
 if __name__ == "__main__":
