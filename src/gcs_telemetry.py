@@ -18,25 +18,24 @@ class OnboardTelemetry:
         self.new_no_fire_pub = rospy.Publisher("new_no_fire_bins", Int32MultiArray, queue_size=100)
 
     def run(self):
-        while True:
-            msg = self.connection.recv_match()
-            if msg is None:
-                continue
-            msg = msg.to_dict()
-            print(msg)
+        msg = self.connection.recv_match()
+        if msg is None:
+            return
+        msg = msg.to_dict()
+        print(msg)
 
-            if msg['mavpackettype'] == 'TUNNEL':
-                payload = msg['payload']
-                updated_bins_msg = Int32MultiArray()
-                for i in range(int(msg['payload_length']/3)):
-                    bin_bytes = payload[3*i:3*i+3]
-                    bin = int.from_bytes(bin_bytes, byteorder='big')
-                    updated_bins_msg.data.append(bin)
+        if msg['mavpackettype'] == 'TUNNEL':
+            payload = msg['payload']
+            updated_bins_msg = Int32MultiArray()
+            for i in range(int(msg['payload_length']/3)):
+                bin_bytes = payload[3*i:3*i+3]
+                bin = int.from_bytes(bin_bytes, byteorder='big')
+                updated_bins_msg.data.append(bin)
 
-                if msg['payload_type'] == 32768:
-                    self.new_fire_pub.publish(updated_bins_msg)
-                elif msg['payload_type'] == 32769:
-                    self.new_no_fire_pub.publish(updated_bins_msg)
+            if msg['payload_type'] == 32768:
+                self.new_fire_pub.publish(updated_bins_msg)
+            elif msg['payload_type'] == 32769:
+                self.new_no_fire_pub.publish(updated_bins_msg)
 
 
 if __name__ == "__main__":
