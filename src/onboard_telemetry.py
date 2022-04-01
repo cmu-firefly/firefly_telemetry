@@ -3,7 +3,7 @@
 import math
 
 import rospy
-from std_msgs.msg import Int32MultiArray
+from std_msgs.msg import Int32MultiArray, Empty
 from pymavlink import mavutil
 import os
 from threading import Lock
@@ -39,6 +39,7 @@ class OnboardTelemetry:
         rospy.Subscriber("new_fire_bins", Int32MultiArray, self.new_fire_bins_callback)
         rospy.Subscriber("new_no_fire_bins", Int32MultiArray, self.new_no_fire_bins_callback)
         rospy.Timer(rospy.Duration(1), self.one_sec_timer_callback)
+        self.extract_frame_pub = rospy.Publisher("extract_frame", Empty, queue_size=1)
 
         self.bytes_per_sec_send_rate = 1152.0
         self.mavlink_packet_overhead_bytes = 12
@@ -121,6 +122,18 @@ class OnboardTelemetry:
     def run(self):
         self.send_map_update()
         self.send_pose_update()
+
+        msg = self.connection.recv_match()
+        if msg is None:
+            return
+        msg = msg.to_dict()
+        print(msg)
+
+        if msg['mavpackettype'] == 'FIREFLY_GET_FRAME':
+            if msg['get_frame'] == 1:
+                # tell perception handler to extract frame
+                e = Empty()
+                self.extract_frame_pub.publish(e)
 
 
 if __name__ == "__main__":
