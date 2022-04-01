@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import math
 
@@ -9,6 +9,7 @@ import os
 from threading import Lock
 from enum import Enum
 import tf2_ros
+import struct
 
 os.environ['MAVLINK20'] = '1'
 
@@ -43,17 +44,17 @@ class OnboardTelemetry:
         self.bytes_per_sec_send_rate = 1152.0
         self.mavlink_packet_overhead_bytes = 12
 
-    def new_fire_bins_callback(self, data: Int32MultiArray):
+    def new_fire_bins_callback(self, data):
         with self.new_bins_mutex:
             self.new_fire_bins.extend(data.data)
 
-    def new_no_fire_bins_callback(self, data: Int32MultiArray):
+    def new_no_fire_bins_callback(self, data):
         with self.new_bins_mutex:
             self.new_no_fire_bins.extend(data.data)
 
     def one_sec_timer_callback(self, event):
         try:
-            transform = self.tfBuffer.lookup_transform('world', 'base_link', rospy.Time(0))
+            transform = self.tfBuffer.lookup_transform('base_link', 'world', rospy.Time(0))
             with self.pose_mutex:
                 self.x = transform.transform.translation.x
                 self.y = transform.transform.translation.y
@@ -75,7 +76,7 @@ class OnboardTelemetry:
     def send_map_update(self):
         updates_to_send = None
         sending_fire_bins = None
-        max_bins_to_send = math.floor(128/3) # Since max payload is 128 bytes and each bin represented by 3 bytes
+        max_bins_to_send = int(math.floor(128/3)) # Since max payload is 128 bytes and each bin represented by 3 bytes
         with self.new_bins_mutex:
             if len(self.new_fire_bins) > 0:
                 updates_to_send = self.new_fire_bins[:max_bins_to_send]
@@ -90,11 +91,12 @@ class OnboardTelemetry:
 
         payload = bytearray()
         for update in updates_to_send:
-            payload.extend(update.to_bytes(3, byteorder='big'))
+           # payload.extend(update.to_bytes(3, byteorder='big'))
+           payload.extend(struct.pack(">i", update)[-3:])
 
         payload_length = len(payload)
         if len(payload) < 128:
-            payload.extend(bytes([0]*(128-len(payload))))  # Pad payload so it has 128 bytes
+            payload.extend(bytearray(128-len(payload)))  # Pad payload so it has 128 bytes
 
         if sending_fire_bins:
             self.connection.mav.tunnel_send(0, 0, PayloadTunnelType.FireBins.value, payload_length, payload)
