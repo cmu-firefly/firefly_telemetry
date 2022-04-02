@@ -25,6 +25,7 @@ class OnboardTelemetry:
         self.clear_map_flag = False
         self.set_local_pos_ref_flag = False
 
+
     def run(self):
         msg = self.connection.recv_match()
         if msg is None:
@@ -50,6 +51,14 @@ class OnboardTelemetry:
                                   rospy.Time.now(),
                                   "base_link1",
                                   "world")
+
+        if self.clear_map_flag:
+            self.connection.mav.firefly_clear_map_send(0)
+            self.clear_map_flag = False
+
+        if self.set_local_pos_ref_flag:
+            self.connection.mav.firefly_set_local_pos_ref_send(0)
+            self.clear_map_flag = False
 
     def clear_map_callback(self, empty_msg):
         self.clear_map_flag = True

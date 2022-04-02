@@ -3,7 +3,7 @@
 import math
 
 import rospy
-from std_msgs.msg import Int32MultiArray
+from std_msgs.msg import Int32MultiArray, Empty
 from pymavlink import mavutil
 import os
 from threading import Lock
@@ -39,6 +39,9 @@ class OnboardTelemetry:
 
         rospy.Subscriber("new_fire_bins", Int32MultiArray, self.new_fire_bins_callback)
         rospy.Subscriber("new_no_fire_bins", Int32MultiArray, self.new_no_fire_bins_callback)
+        self.set_local_pos_ref_pub = rospy.Publisher("set_local_pos_ref", Empty, queue_size=100)
+        self.clear_map_pub = rospy.Publisher("clear_map", Empty, queue_size=100)
+
         rospy.Timer(rospy.Duration(1), self.one_sec_timer_callback)
 
         self.bytes_per_sec_send_rate = 1152.0
@@ -123,6 +126,18 @@ class OnboardTelemetry:
     def run(self):
         self.send_map_update()
         self.send_pose_update()
+
+        msg = self.connection.recv_match()
+        if msg is None:
+            return
+        msg = msg.to_dict()
+
+        if msg['mavpackettype'] == 'FIREFLY_CLEAR_MAP':
+            self.clear_map_pub.publish(Empty())
+        elif msg['mavpackettype'] == 'FIREFLY_SET_LOCAL_POS_REF':
+            self.clear_map_pub.publish(Empty())
+            self.set_local_pos_ref_pub.publish(Empty())
+            pass
 
 
 if __name__ == "__main__":
