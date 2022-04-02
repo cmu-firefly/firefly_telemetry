@@ -7,13 +7,14 @@ from std_msgs.msg import Int32MultiArray
 from pymavlink import mavutil
 import os
 import tf
+import time
 
 
 os.environ['MAVLINK20'] = '1'
 
-
 class OnboardTelemetry:
     def __init__(self):
+        self.now = time.time()
         self.connection = mavutil.mavlink_connection('/dev/ttyUSB0', baud=57600, dialect='firefly')
         self.new_fire_pub = rospy.Publisher("new_fire_bins", Int32MultiArray, queue_size=100)
         self.new_no_fire_pub = rospy.Publisher("new_no_fire_bins", Int32MultiArray, queue_size=100)
@@ -21,6 +22,10 @@ class OnboardTelemetry:
         self.br = tf.TransformBroadcaster()
 
     def run(self):
+        if(time.time() - self.now > 10):
+            self.connection.mav.firefly_get_frame_send(1)
+            self.now = time.time()
+
         msg = self.connection.recv_match()
         if msg is None:
             return
