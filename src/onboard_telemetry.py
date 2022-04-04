@@ -43,6 +43,7 @@ class OnboardTelemetry:
         self.clear_map_pub = rospy.Publisher("clear_map", Empty, queue_size=100)
 
         rospy.Timer(rospy.Duration(1), self.one_sec_timer_callback)
+        self.extract_frame_pub = rospy.Publisher("extract_frame", Empty, queue_size=1)
 
         self.bytes_per_sec_send_rate = 1152.0
         self.mavlink_packet_overhead_bytes = 12
@@ -138,6 +139,13 @@ class OnboardTelemetry:
             self.clear_map_pub.publish(Empty())
             self.set_local_pos_ref_pub.publish(Empty())
             pass
+        print(msg)
+
+        if msg['mavpackettype'] == 'FIREFLY_GET_FRAME':
+            if msg['get_frame'] == 1:
+                # tell perception handler to extract frame
+                e = Empty()
+                self.extract_frame_pub.publish(e)
 
 
 if __name__ == "__main__":
